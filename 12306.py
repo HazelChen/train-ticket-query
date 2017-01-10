@@ -1,8 +1,15 @@
 #-*- coding:utf-8 -*-
-import sys, getopt
+import sys, getopt, time
 import requests, socket
 import station_code, seat_code
 import mail
+import logging
+
+logging.basicConfig(level=logging.INFO,
+                format='%(asctime)s  %(levelname)s %(message)s',
+                datefmt='%Y %b %d %H:%M:%S',
+                filename='12306.log',
+                filemode='a')
 
 def print_usage():
 	print('格式：python 12306.py -f 福州 -t 杭州 -d 2017-01-20')
@@ -40,10 +47,8 @@ for option, arg in options:
 		valid_seats = arg.split(',')
 		for num in range(len(valid_seats)):
 			valid_seats[num] = seat_code.code_map[valid_seats[num]]
-		print(valid_seats)
 
 url = 'https://kyfw.12306.cn/otn/leftTicket/queryA?leftTicketDTO.train_date={}&leftTicketDTO.from_station={}&leftTicketDTO.to_station={}&purpose_codes=ADULT'.format(query_date,from_station,to_station)
-print(url)
 
 def has_ticket(info):
 	for number in range(len(info)):
@@ -64,29 +69,36 @@ def has_ticket(info):
 	return False
 
 while True:
-	try_times = try_times + 1
-	print('try ' + str(try_times) + ' times')
+	
+	query_begin_time = time.time()
+
+	# 获取数据
 	try:
-		result = requests.get(url,verify=False, timeout=600)   # 不用验证证书
+		result = requests.get(url, verify=False, timeout=600)   # 不用验证证书
 	except socket.timeout:
 		mail.email('12306封号了，快来重启服务')
-		print('timeout')
+		logging.error('timeout')
 		break
 	except requests.exceptions.ReadTimeout:
 		mail.email('12306封号了，快来重启服务')
-		print('timeout')
+		logging.error('timeout')
 		break
-
 	info = result.json()  # 转换json格式
+
+	# 日志
+	query_end_time = time.time()
+	try_times = try_times + 1
+	logging.info(str(try_times) + ' times trying, take time: ' + str(query_end_time - query_begin_time) + 's')
+
 	if info['status'] and 'data' in info.keys():
 		ticket_result = has_ticket(info['data'])
 		if ticket_result:
-			print('有票啦！车次号：')
-			print(ticket_result)
+			logging.info('Get it!')
+			logging.info(ticket_result)
 			mail.email(ticket_result)
 			break;
 
 	else:
-		print(info)
+		logging.error('Error!!' + info)
 		break;
 

@@ -20,4 +20,4 @@ def email(input_msg):
     server.sendmail(from_addr, [to_addr], msg.as_string())
     server.quit()
 
-    print('发送邮件成功')
+    logging.info('mail sended.')
