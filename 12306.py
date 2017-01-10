@@ -67,11 +67,13 @@ while True:
 	try_times = try_times + 1
 	print('try ' + str(try_times) + ' times')
 	try:
-		result = requests.get(url,verify=False, timeout=30)   # 不用验证证书
+		result = requests.get(url,verify=False, timeout=600)   # 不用验证证书
 	except socket.timeout:
+		mail.email('12306封号了，快来重启服务')
 		print('timeout')
 		break
 	except requests.exceptions.ReadTimeout:
+		mail.email('12306封号了，快来重启服务')
 		print('timeout')
 		break
 
