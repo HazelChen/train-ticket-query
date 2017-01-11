@@ -76,14 +76,21 @@ while True:
 	try:
 		result = requests.get(url, verify=False, timeout=600)   # 不用验证证书
 	except socket.timeout:
-		mail.email('12306封号了，快来重启服务')
+		mail.email('服务停止，12306返回超时')
 		logging.error('timeout')
 		break
 	except requests.exceptions.ReadTimeout:
-		mail.email('12306封号了，快来重启服务')
+		mail.email('服务停止，12306返回超时')
 		logging.error('timeout')
 		break
-	info = result.json()  # 转换json格式
+
+	# 转换json格式
+	try:
+		info = result.json()
+	except ValueError:
+		mail.email('服务停止，12306返回了奇怪的结果, json无法解析:' + str(result))
+		logging.error('ValueError: No JSON object could be decoded, value=' + str(result))
+		break  
 
 	# 日志
 	query_end_time = time.time()
