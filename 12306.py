@@ -69,6 +69,15 @@ def has_ticket(info):
 	return False
 
 while True:
+	# 12306的运行时间是7:00~23:00，此时间外不进行查票，且脚本运行间隔为1小时一次
+	hour = time.localtime().tm_hour
+	if hour >= 23 or hour < 6:
+		time.sleep(3600) # 一小时
+	else:
+		time.sleep(300) # 5分钟
+
+	if hour >= 23 or hour < 7: # 交易时间外不进行查票
+		continue
 	
 	query_begin_time = time.time()
 
