@@ -1,56 +1,17 @@
 #-*- coding:utf-8 -*-
-import sys, getopt, time
-import requests, socket
-import station_code, seat_code
-import mail
-import logging
+import sys, time, pymysql
+import requests, socket, logging
+import config, mail, seat_code
 
-logging.basicConfig(level=logging.INFO,
-                format='%(asctime)s  %(levelname)s %(message)s',
-                datefmt='%Y %b %d %H:%M:%S',
-                filename='12306.log',
-                filemode='a')
+logging.basicConfig(level=config.log_level,
+                format=config.log_format,
+                datefmt=config.log_datefmt,
+                filename=config.log_filename,
+                filemode=config.log_filemode)
 
-def print_usage():
-	print('格式：python 12306.py -f 福州 -t 杭州 -d 2017-01-20')
-	print('或：python 12306.py -f 福州 -t 杭州 -d 2017-01-20 -n D3343,G366')
-	print('或：python 12306.py -f 福州 -t 杭州 -d 2017-01-20 -n D3343,G366 -s 一等座,无座')
+db = pymysql.connect(config.db_host, config.db_username, config.db_password, config.db_table_name);
 
-# 获取参数
-try:
-	options,args = getopt.getopt(sys.argv[1:],"hf:t:d:n:s:",["help","from=", "to=", "date=", "number=", "seat="])
-except getopt.GetoptError:
-	print_usage()
-	sys.exit()
-
-# 参数获取
-global from_station
-global to_station
-global query_date
-try_times = 0
-valid_trips = []
-valid_seats = []
-
-for option, arg in options:
-	if option in ("-h", "help"):
-		print_usage()
-		sys.exit()
-	if option in ("-f", "from"):
-		from_station = station_code.code_map[arg]
-	if option in ("-t", "to"):
-		to_station = station_code.code_map[arg]
-	if option in ("-d", "date"):
-		query_date = arg
-	if option in ("-n", "number"):
-		valid_trips = arg.split(',')
-	if option in ("-s", "seat"):
-		valid_seats = arg.split(',')
-		for num in range(len(valid_seats)):
-			valid_seats[num] = seat_code.code_map[valid_seats[num]]
-
-url = 'https://kyfw.12306.cn/otn/leftTicket/queryA?leftTicketDTO.train_date={}&leftTicketDTO.from_station={}&leftTicketDTO.to_station={}&purpose_codes=ADULT'.format(query_date,from_station,to_station)
-
-def has_ticket(info):
+def has_ticket(info, valid_trips, valid_seats):
 	for number in range(len(info)):
 		trip = info[number]['queryLeftNewDTO']
 		trip_number = trip['station_train_code']
@@ -68,53 +29,81 @@ def has_ticket(info):
 
 	return False
 
-while True:
-	# 12306的运行时间是7:00~23:00，此时间外不进行查票，且脚本运行间隔为1小时一次
-	hour = time.localtime().tm_hour
-	if hour >= 23 or hour < 6:
-		time.sleep(3600) # 一小时
-	else:
-		time.sleep(300) # 5分钟
+# 修改数据库数据状态
+def modify_status(id_num, status):
+	cursor = db.cursor()
+	cursor.execute("UPDATE trainquery.querylist SET `status`=%s WHERE `id` = %s", [status, id_num])
+	db.commit()
 
-	if hour >= 23 or hour < 7: # 交易时间外不进行查票
-		continue
+
+with db:
+	while True:
+		# 12306的运行时间是7:00~23:00，此时间外不进行查票，且脚本运行间隔为闲时间隔
+		hour = time.localtime().tm_hour
+		if hour >= 23 or hour < 6:
+			time.sleep(config.timegap_free) # 闲时间隔
+		else:
+			time.sleep(config.timegap_busy) # 忙时间隔
+
+		if hour >= 23 or hour < 7: # 交易时间外不进行查票
+			continue
 	
-	query_begin_time = time.time()
+		# 查数据库
+		cursor = db.cursor()
+		cursor.execute("SELECT * FROM trainquery.querylist WHERE `status`='init'")
+		querylist = cursor.fetchall()
+		if len(querylist) == 0:
+			logging.info('nothing to query, hahaha...')
+			break
 
-	# 获取数据
-	try:
-		result = requests.get(url, verify=False, timeout=600)   # 不用验证证书
-	except socket.timeout:
-		mail.email('服务停止，12306返回超时')
-		logging.error('timeout')
-		break
-	except requests.exceptions.ReadTimeout:
-		mail.email('服务停止，12306返回超时')
-		logging.error('timeout')
-		break
+		for query_request in querylist:
+			# 参数获取
+			id_num = query_request[0]
+			from_station = query_request[1]
+			to_station = query_request[2]
+			query_date = query_request[3]
+			valid_trips_in_db = query_request[4]
+			valid_seats_in_db = query_request[5]
+			valid_trips = []
+			valid_seats = []
+			if valid_trips_in_db != None and valid_trips_in_db != '':
+				valid_trips = valid_trips_in_db.split(',')
+			if valid_seats_in_db != None and valid_seats_in_db != '':
+				valid_seats = valid_seats_in_db.split(',')
+			url = 'https://kyfw.12306.cn/otn/leftTicket/queryA?leftTicketDTO.train_date={}&leftTicketDTO.from_station={}&leftTicketDTO.to_station={}&purpose_codes=ADULT'.format(query_date,from_station,to_station)
 
-	# 转换json格式
-	try:
-		info = result.json()
-	except ValueError:
-		mail.email('服务停止，12306返回了奇怪的结果, json无法解析:' + str(result))
-		logging.error('ValueError: No JSON object could be decoded, value=' + str(result))
-		break  
+			query_begin_time = time.time()
 
-	# 日志
-	query_end_time = time.time()
-	try_times = try_times + 1
-	logging.info(str(try_times) + ' times trying, take time: ' + str(query_end_time - query_begin_time) + 's')
+			# 查询12306
+			try:
+				result = requests.get(url, verify=False, timeout=600)   # 不用验证证书
+			except socket.timeout:
+				mail.email('服务停止，12306返回超时')
+				logging.error(str(query_request) + ' timeout')
+			except requests.exceptions.ReadTimeout:
+				mail.email('服务停止，12306返回超时')
+				logging.error(str(query_request) + ' timeout')
 
-	if info['status'] and 'data' in info.keys():
-		ticket_result = has_ticket(info['data'])
-		if ticket_result:
-			logging.info('Get it!')
-			logging.info(ticket_result)
-			mail.email(ticket_result)
-			break;
+			# 转换json格式
+			try:
+				info = result.json()
+			except ValueError:
+				mail.email(str(query_request) + ' 服务停止，12306返回了奇怪的结果, json无法解析:' + str(result))
+				logging.error(str(query_request) + ' ValueError: No JSON object could be decoded, value=' + str(result))
+				modify_status(id_num, 'bad')
 
-	else:
-		logging.error('Error!!' + info)
-		break;
+			# 日志
+			query_end_time = time.time()
+			logging.info(str(query_request) + ' , take time: ' + str(query_end_time - query_begin_time) + 's')
 
+			if info['status'] and 'data' in info.keys():
+				ticket_result = has_ticket(info['data'], valid_trips, valid_seats)
+				if ticket_result:
+					logging.info('Get it!')
+					logging.info(ticket_result)
+					mail.email('有票啦' + str(ticket_result))
+					modify_status(id_num, 'done')
+
+			else:
+				logging.error(str(query_request) + ' Error!!' + info)
+				modify_status(id_num, 'bad')

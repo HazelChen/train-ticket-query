@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 import sys, getopt, pymysql
-import station_code, seat_code
+import config, station_code, seat_code
 
 def print_usage():
     print('格式：python add_queriers.py -f 福州 -t 杭州 -d 2017-01-20')
@@ -15,9 +15,9 @@ except getopt.GetoptError:
     sys.exit()
 
 # 参数获取
-global from_station
-global to_station
-global query_date
+from_station = None
+to_station = None
+query_date = None
 valid_trips = None
 valid_seats = None
 
@@ -40,7 +40,7 @@ for option, arg in options:
         valid_seats = ','.join(valid_seats)
 
 #将con设定为全局连接
-db = pymysql.connect('localhost', 'root', 'root', 'trainquery');
+db = pymysql.connect(config.db_host, config.db_username, config.db_password, config.db_table_name);
 with db:
     #获取连接的cursor，只有获取了cursor，我们才能进行各种操作
     cursor = db.cursor()
