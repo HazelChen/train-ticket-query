@@ -101,7 +101,7 @@ with db:
 				if ticket_result:
 					logging.info('Get it!')
 					logging.info(ticket_result)
-					mail.email(str(query_request + ' 有票啦，车次号: ' + str(ticket_result))
+					mail.email(str(query_request) + ' 有票啦，车次号: ' + str(ticket_result))
 					modify_status(id_num, 'done')
 
 			else:
