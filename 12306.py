@@ -25,7 +25,7 @@ def has_ticket(info, valid_trips, valid_seats):
 				continue
 			seat_num = trip[seat];
 			if seat_num == '有' or (seat_num.isdigit() and int(seat_num) > 0):
-				return trip
+				return trip_number
 
 	return False
 
@@ -101,7 +101,7 @@ with db:
 				if ticket_result:
 					logging.info('Get it!')
 					logging.info(ticket_result)
-					mail.email('有票啦' + str(ticket_result))
+					mail.email(str(query_request + ' 有票啦，车次号: ' + str(ticket_result))
 					modify_status(id_num, 'done')
 
 			else:
