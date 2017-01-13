@@ -1,7 +1,8 @@
 #-*- coding:utf-8 -*-
-import sys, time, pymysql
+import sys, time
 import requests, socket, logging
-import config, mail, seat_code
+import config, mail, seat_code, query_db
+
 
 logging.basicConfig(level=config.log_level,
                 format=config.log_format,
@@ -9,7 +10,8 @@ logging.basicConfig(level=config.log_level,
                 filename=config.log_filename,
                 filemode=config.log_filemode)
 
-db = pymysql.connect(config.db_host, config.db_username, config.db_password, config.db_table_name);
+db = query_db.QueryDB()
+db.connect()
 
 def has_ticket(info, valid_trips, valid_seats):
 	for number in range(len(info)):
@@ -31,12 +33,9 @@ def has_ticket(info, valid_trips, valid_seats):
 
 # 修改数据库数据状态
 def modify_status(id_num, status):
-	cursor = db.cursor()
-	cursor.execute("UPDATE trainquery.querylist SET `status`=%s WHERE `id` = %s", [status, id_num])
-	db.commit()
+	db.execute("UPDATE trainquery.querylist SET `status`=%s WHERE `id` = %s", [status, id_num])
 
-
-with db:
+try:
 	while True:
 		# 12306的运行时间是7:00~23:00，此时间外不进行查票，且脚本运行间隔为闲时间隔
 		hour = time.localtime().tm_hour
@@ -49,8 +48,7 @@ with db:
 			continue
 	
 		# 查数据库
-		cursor = db.cursor()
-		cursor.execute("SELECT * FROM trainquery.querylist WHERE `status`='init'")
+		cursor = db.query("SELECT * FROM trainquery.querylist WHERE `status`='init'")
 		querylist = cursor.fetchall()
 		if len(querylist) == 0:
 			logging.info('nothing to query, hahaha...')
@@ -107,3 +105,5 @@ with db:
 			else:
 				logging.error(str(query_request) + ' Error!!' + info)
 				modify_status(id_num, 'bad')
+finally:
+	db.close()

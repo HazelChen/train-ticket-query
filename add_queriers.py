@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
-import sys, getopt, pymysql
-import config, station_code, seat_code
+import sys, getopt
+import config, station_code, seat_code, query_db
 
 def print_usage():
     print('格式：python add_queriers.py -f 福州 -t 杭州 -d 2017-01-20')
@@ -39,9 +39,7 @@ for option, arg in options:
             valid_seats[num] = seat_code.code_map[valid_seats[num]]
         valid_seats = ','.join(valid_seats)
 
-#将con设定为全局连接
-db = pymysql.connect(config.db_host, config.db_username, config.db_password, config.db_table_name);
-with db:
-    #获取连接的cursor，只有获取了cursor，我们才能进行各种操作
-    cursor = db.cursor()
-    cursor.execute("INSERT INTO trainquery.querylist (`from`, `to`, `date`, `number`, `seat`, `status`) VALUES (%s, %s, %s, %s, %s, DEFAULT)", [from_station, to_station, query_date, valid_trips, valid_seats])
+db = query_db.QueryDB()
+db.connect()
+db.execute("INSERT INTO trainquery.querylist (`from`, `to`, `date`, `number`, `seat`, `status`) VALUES (%s, %s, %s, %s, %s, DEFAULT)", [from_station, to_station, query_date, valid_trips, valid_seats])
+db.close()
