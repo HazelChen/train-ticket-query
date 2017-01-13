@@ -86,8 +86,8 @@ try:
 			try:
 				info = result.json()
 			except ValueError:
-				mail.email(str(query_request) + ' 服务停止，12306返回了奇怪的结果, json无法解析:' + str(result))
-				logging.error(str(query_request) + ' ValueError: No JSON object could be decoded, value=' + str(result))
+				mail.email(str(query_request) + ' 服务停止，12306返回了奇怪的结果, json无法解析:' + result.text)
+				logging.error(str(query_request) + ' ValueError: No JSON object could be decoded, value=' + result.text)
 				modify_status(id_num, 'bad')
 
 			# 日志
