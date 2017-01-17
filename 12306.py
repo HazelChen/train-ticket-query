@@ -81,6 +81,9 @@ try:
 			except requests.exceptions.ReadTimeout:
 				mail.email('服务停止，12306返回超时')
 				logging.error(str(query_request) + ' timeout')
+			except ConnectionError as err:
+				mail.email('服务停止，连接出现问题, error: ' + str(err))
+				logging.error(str(query_request) + ' connection error, error=' + str(err))
 
 			# 转换json格式
 			try:
