@@ -1,5 +1,5 @@
 #-*- coding:utf-8 -*-
-import sys, time
+import sys, time,json
 import requests, socket, logging
 import config, mail, seat_code, query_db
 
@@ -62,13 +62,14 @@ try:
 			query_date = query_request[3]
 			valid_trips_in_db = query_request[4]
 			valid_seats_in_db = query_request[5]
+			query_request_json = '[{},{},{},{},{},{}]'.format(id_num, from_station, to_station, query_date, valid_trips_in_db, valid_seats_in_db)
 			valid_trips = []
 			valid_seats = []
 			if valid_trips_in_db != None and valid_trips_in_db != '':
 				valid_trips = valid_trips_in_db.split(',')
 			if valid_seats_in_db != None and valid_seats_in_db != '':
 				valid_seats = valid_seats_in_db.split(',')
-			url = 'https://kyfw.12306.cn/otn/leftTicket/queryA?leftTicketDTO.train_date={}&leftTicketDTO.from_station={}&leftTicketDTO.to_station={}&purpose_codes=ADULT'.format(query_date,from_station,to_station)
+			url = 'https://kyfw.12306.cn/otn/leftTicket/queryZ?leftTicketDTO.train_date={}&leftTicketDTO.from_station={}&leftTicketDTO.to_station={}&purpose_codes=ADULT'.format(query_date,from_station,to_station)
 
 			query_begin_time = time.time()
 
@@ -76,36 +77,37 @@ try:
 			try:
 				result = requests.get(url, verify=False, timeout=600)   # 不用验证证书
 			except socket.timeout:
-				mail.email('服务停止，12306返回超时')
-				logging.error(str(query_request) + ' timeout')
+				mail.email('服务停止，12306返回超时, input=' + query_request_json)
+				logging.error(query_request_json + ' timeout')
 			except requests.exceptions.ReadTimeout:
-				mail.email('服务停止，12306返回超时')
-				logging.error(str(query_request) + ' timeout')
+				mail.email('服务停止，12306返回超时, input=' + query_request_json)
+				logging.error(query_request_json + ' timeout')
 			except ConnectionError as err:
 				mail.email('服务停止，连接出现问题, error: ' + str(err))
-				logging.error(str(query_request) + ' connection error, error=' + str(err))
+				logging.error(query_request_json + ' connection error, error=' + str(err))
 
 			# 转换json格式
 			try:
 				info = result.json()
 			except ValueError:
-				logging.error(str(query_request) + ' ValueError: No JSON object could be decoded, value=' + result.text)
+				logging.error(query_request_json + ' ValueError: No JSON object could be decoded, value=' + result.text)
 				continue;
 
 			# 日志
 			query_end_time = time.time()
-			logging.info(str(query_request) + ' , take time: ' + str(query_end_time - query_begin_time) + 's')
+			logging.info(query_request_json + ' , take time: ' + str(query_end_time - query_begin_time) + 's')
 
 			if info['status'] and 'data' in info.keys():
 				ticket_result = has_ticket(info['data'], valid_trips, valid_seats)
 				if ticket_result:
 					logging.info('Get it!')
 					logging.info(ticket_result)
-					mail.email(str(query_request) + ' 有票啦，车次号: ' + str(ticket_result))
+					mail.email(query_request_json + ' 有票啦，车次号: ' + str(ticket_result))
 					modify_status(id_num, 'done')
 
 			else:
-				logging.error(str(query_request) + ' Error!!' + info)
+				logging.error('{} Error!!, info={}'.format(query_request_json, info))
+				mail.email(query_request_json + ' 查询失败， info=' + str(info))
 				modify_status(id_num, 'bad')
 finally:
 	db.close()
